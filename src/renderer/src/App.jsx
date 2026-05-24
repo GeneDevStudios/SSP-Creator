@@ -100,16 +100,122 @@ function UpdateBanner() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// CHANGELOG MODAL
+// ═══════════════════════════════════════════════════════════════════
+function ChangelogModal({ onClose }) {
+  const [releases, setReleases] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+
+  useEffect(() => {
+    fetch('https://api.github.com/repos/GeneDevStudios/SSP-Creator/releases?per_page=50')
+      .then(r => { if (!r.ok) throw new Error(`GitHub API error: ${r.status}`); return r.json(); })
+      .then(data => {
+        setReleases(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, []);
+
+  // Simple markdown → JSX: bold, bullets, headers
+  const renderBody = (body) => {
+    if (!body) return <span style={{ color:S.t5, fontSize:12, fontStyle:'italic' }}>No release notes provided.</span>;
+    return body.split('\n').map((line, i) => {
+      if (line.startsWith('## ')) return <div key={i} style={{ fontSize:12, fontWeight:700, color:S.blueLight, marginTop:10, marginBottom:4 }}>{line.slice(3)}</div>;
+      if (line.startsWith('### ')) return <div key={i} style={{ fontSize:11, fontWeight:700, color:S.t3, marginTop:8, marginBottom:2 }}>{line.slice(4)}</div>;
+      if (line.startsWith('* ') || line.startsWith('- ')) return (
+        <div key={i} style={{ display:'flex', gap:8, fontSize:12, color:S.t3, lineHeight:1.6, paddingLeft:4 }}>
+          <span style={{ color:S.blueLight, flexShrink:0 }}>·</span>
+          <span>{line.slice(2)}</span>
+        </div>
+      );
+      if (line.trim() === '') return <div key={i} style={{ height:4 }} />;
+      return <div key={i} style={{ fontSize:12, color:S.t4, lineHeight:1.6 }}>{line}</div>;
+    });
+  };
+
+  const formatDate = (iso) => new Date(iso).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+  return (
+    <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000 }} onClick={onClose}>
+      <div style={{ width:580, maxHeight:'80vh', display:'flex', flexDirection:'column', backgroundColor:S.bg1, borderRadius:14, border:`1px solid ${S.bg3}`, overflow:'hidden' }} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ padding:'20px 24px 16px', borderBottom:`1px solid ${S.bg3}`, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:S.t1 }}>What's New</div>
+            <div style={{ fontSize:11, color:S.t5, marginTop:2 }}>Anvil FORGE — Release History</div>
+          </div>
+          <button onClick={onClose} style={{ ...S.btnOutline, padding:'4px 10px', fontSize:12 }}>Close</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ overflowY:'auto', flex:1, padding:'8px 0' }}>
+          {loading && (
+            <div style={{ padding:40, textAlign:'center', color:S.t5, fontSize:13 }}>Loading releases…</div>
+          )}
+          {error && (
+            <div style={{ padding:24, margin:16, borderRadius:8, backgroundColor:'#dc262222', border:'1px solid #dc262244', color:'#f87171', fontSize:12 }}>
+              Could not load release notes. Check your internet connection.<br/>
+              <span style={{ color:S.t5, fontSize:11 }}>{error}</span>
+            </div>
+          )}
+          {!loading && !error && releases.length === 0 && (
+            <div style={{ padding:40, textAlign:'center', color:S.t5, fontSize:13 }}>No releases found.</div>
+          )}
+          {!loading && !error && releases.map((release, idx) => (
+            <div key={release.id} style={{ padding:'16px 24px', borderBottom: idx < releases.length-1 ? `1px solid ${S.bg2}` : 'none' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                <span style={{ fontSize:14, fontWeight:800, color:S.t1, fontFamily:S.mono }}>{release.tag_name}</span>
+                {release.prerelease && (
+                  <span style={{ fontSize:9, padding:'2px 6px', borderRadius:4, backgroundColor:S.amber+'22', color:S.amber, fontWeight:700, textTransform:'uppercase' }}>Pre-release</span>
+                )}
+                {idx === 0 && !release.prerelease && (
+                  <span style={{ fontSize:9, padding:'2px 6px', borderRadius:4, backgroundColor:S.green+'22', color:'#34d399', fontWeight:700, textTransform:'uppercase' }}>Latest</span>
+                )}
+                <span style={{ fontSize:11, color:S.t5, marginLeft:'auto' }}>{formatDate(release.published_at)}</span>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
+                {renderBody(release.body)}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'12px 24px', borderTop:`1px solid ${S.bg3}`, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span style={{ fontSize:11, color:S.t5 }}>{releases.length} release{releases.length !== 1 ? 's' : ''} total</span>
+          <a href="https://github.com/GeneDevStudios/SSP-Creator/releases" target="_blank" rel="noreferrer"
+            style={{ fontSize:11, color:S.blueLight, textDecoration:'none', fontWeight:600 }}>
+            View on GitHub ↗
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // TOPBAR
 // ═══════════════════════════════════════════════════════════════════
-function Topbar({ view, onNavigate, appVersion }) {
+function Topbar({ view, onNavigate, appVersion, onShowChangelog }) {
   return (
     <div style={{ background:`linear-gradient(135deg,${S.bg1},${S.bg2})`, borderBottom:`1px solid ${S.bg3}`, padding:'10px 24px', display:'flex', alignItems:'center', gap:16 }}>
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
         <span style={{ color:S.blueLight }}><ShieldIcon /></span>
         <span title="Formalized OSCAL Risk Governance Editor" style={{ fontSize:16, fontWeight:800, color:S.t1 }}>Anvil <span style={{ color:S.blueLight }}>FORGE</span></span>
         <span style={{ fontSize:10, color:S.t5, fontFamily:S.mono }}>GeneDevStudios</span>
-        {appVersion && <span style={{ fontSize:9, color:S.t5, fontFamily:S.mono, padding:'1px 5px', borderRadius:3, border:`1px solid ${S.bg3}` }}>v{appVersion}</span>}
+        {appVersion && (
+          <button onClick={onShowChangelog} title="What's New"
+            style={{ fontSize:9, color:S.t5, fontFamily:S.mono, padding:'1px 5px', borderRadius:3, border:`1px solid ${S.bg3}`, background:'transparent', cursor:'pointer', transition:'border-color 0.15s, color 0.15s' }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=S.blueLight;e.currentTarget.style.color=S.blueLight;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=S.bg3;e.currentTarget.style.color=S.t5;}}>
+            v{appVersion}
+          </button>
+        )}
       </div>
       <div style={{ flex:1 }} />
       <div style={{ display:'flex', gap:4 }}>
@@ -1069,9 +1175,10 @@ function Workspace({ sspId, onBack }) {
 // ROOT APP
 // ═══════════════════════════════════════════════════════════════════
 export default function App() {
-  const [view, setView]       = useState('dashboard'); // dashboard | catalogs | workspace
-  const [sspId, setSspId]     = useState(null);
-  const [appVersion, setAppVersion] = useState(null);
+  const [view, setView]               = useState('dashboard');
+  const [sspId, setSspId]             = useState(null);
+  const [appVersion, setAppVersion]   = useState(null);
+  const [showChangelog, setShowChangelog] = useState(false);
 
   useEffect(() => {
     forge?.app.version().then(setAppVersion).catch(()=>{});
@@ -1084,11 +1191,12 @@ export default function App() {
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', backgroundColor:S.bg0, fontFamily:S.font, color:S.t2 }}>
       <UpdateBanner />
       {view !== 'workspace' && (
-        <Topbar view={view} onNavigate={setView} appVersion={appVersion} />
+        <Topbar view={view} onNavigate={setView} appVersion={appVersion} onShowChangelog={() => setShowChangelog(true)} />
       )}
       {view === 'dashboard' && <Dashboard onOpen={openSsp} />}
       {view === 'catalogs'  && <CatalogsView />}
       {view === 'workspace' && sspId && <Workspace sspId={sspId} onBack={closeWorkspace} />}
+      {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
     </div>
   );
 }
