@@ -8,3 +8,4 @@ src/renderer/dist/
 .DS_Store
 Thumbs.db
 push.bat
+release.bat
