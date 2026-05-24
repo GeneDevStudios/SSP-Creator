@@ -291,6 +291,8 @@ function CatalogsView() {
   const [nameOverride, setNameOverride]       = useState('');
   const [versionOverride, setVersionOverride] = useState('');
   const [status, setStatus] = useState(null); // { type: 'success'|'error', text }
+  const [showFormatRef, setShowFormatRef] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const load = () => forge.catalog.list().then(setCatalogs).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
@@ -370,6 +372,109 @@ function CatalogsView() {
       <div style={{ marginTop:16, padding:'12px 16px', borderRadius:8, backgroundColor:S.blue+'11', border:`1px solid ${S.blue}22` }}>
         <div style={{ fontSize:11, color:S.blueLight, fontWeight:600, marginBottom:4, display:'flex', alignItems:'center', gap:4 }}><InfoIcon /> Tip</div>
         <div style={{ fontSize:11, color:S.t4, lineHeight:1.5 }}>Download the official NIST 800-53 Rev 5 OSCAL catalog from: <span style={{ fontFamily:S.mono, color:S.blueLight }}>github.com/usnistgov/oscal-content</span> — file: <span style={{ fontFamily:S.mono }}>nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog.json</span></div>
+      </div>
+
+      {/* Format Reference Panel */}
+      <div style={{ marginTop:12, borderRadius:8, border:`1px solid ${S.bg3}`, overflow:'hidden' }}>
+        <button
+          onClick={() => setShowFormatRef(o => !o)}
+          style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'10px 16px', background:'transparent', border:'none', cursor:'pointer', color:S.t4, fontSize:12, fontWeight:600, fontFamily:S.font, textAlign:'left' }}>
+          <ChevronIcon open={showFormatRef} />
+          <span style={{ color:S.t3 }}>Catalog JSON Format Reference</span>
+          <span style={{ marginLeft:'auto', fontSize:10, color:S.t5, fontWeight:400 }}>NIST OSCAL · AnvilCRAFT</span>
+        </button>
+
+        {showFormatRef && (() => {
+          const SCHEMA = `{
+  "catalog": {
+    "uuid": "your-uuid-here",
+    "metadata": {
+      "title": "Framework Name",
+      "version": "2024",
+      "oscal-version": "1.1.2",
+      "last-modified": "2024-01-01T00:00:00Z"
+    },
+    "groups": [
+      {
+        "id": "group-id",
+        "title": "Group Title",
+        "controls": [
+          {
+            "id": "ctrl-1",
+            "title": "Control Title",
+            "props": [
+              { "name": "label", "value": "1.1" }
+            ],
+            "parts": [
+              {
+                "id": "ctrl-1_smt",
+                "name": "statement",
+                "prose": "Control requirement text."
+              },
+              {
+                "id": "ctrl-1_obj",
+                "name": "assessment-objective",
+                "parts": [
+                  {
+                    "id": "ctrl-1_obj.a",
+                    "name": "objective",
+                    "props": [{ "name": "label", "value": "1.1(a)" }],
+                    "prose": "Objective text."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}`;
+          const handleCopy = () => {
+            navigator.clipboard.writeText(SCHEMA).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            });
+          };
+          return (
+            <div style={{ borderTop:`1px solid ${S.bg3}`, backgroundColor:S.bg0 }}>
+              <div style={{ padding:'12px 16px 8px', display:'flex', flexDirection:'column', gap:10 }}>
+                <div style={{ fontSize:11, color:S.t4, lineHeight:1.6 }}>
+                  Both <span style={{ color:S.blueLight, fontWeight:600 }}>NIST OSCAL</span> and <span style={{ color:S.blueLight, fontWeight:600 }}>AnvilCRAFT</span> catalog formats are accepted — the normalizer detects and handles both automatically.
+                  The structure below shows the canonical OSCAL schema. Key fields:
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:4, fontSize:11, color:S.t4 }}>
+                  {[
+                    ['catalog.uuid', 'Any UUID string — uniquely identifies this catalog'],
+                    ['metadata.title', 'Display name shown in the app'],
+                    ['metadata.version', 'Version string (e.g. "Rev 5", "v8.1")'],
+                    ['groups[].id', 'Short ID for the control family (e.g. "ac", "cm")'],
+                    ['controls[].id', 'Unique control ID (e.g. "ac-1", "cm-2.1")'],
+                    ['props[name=label].value', 'Human-readable label shown in the sidebar (e.g. "AC-1")'],
+                    ['parts[name=statement].prose', 'The control requirement text'],
+                    ['parts[name=assessment-objective]', 'Nested objectives — each becomes an assessable row in CRAFT'],
+                  ].map(([field, desc]) => (
+                    <div key={field} style={{ display:'flex', gap:8, alignItems:'baseline' }}>
+                      <span style={{ fontFamily:S.mono, color:S.cyan, fontSize:10, flexShrink:0, minWidth:240 }}>{field}</span>
+                      <span style={{ color:S.t5 }}>{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ position:'relative', margin:'0 16px 16px' }}>
+                <pre style={{ margin:0, padding:'14px 16px', backgroundColor:S.bg1, borderRadius:6, border:`1px solid ${S.bg3}`, fontSize:11, fontFamily:S.mono, color:S.t3, lineHeight:1.6, overflow:'auto', maxHeight:340, whiteSpace:'pre' }}>
+                  {SCHEMA}
+                </pre>
+                <button
+                  onClick={handleCopy}
+                  style={{ position:'absolute', top:8, right:8, ...S.btn(copied ? S.green : S.bg3, copied ? '#fff' : S.t4), padding:'3px 10px', fontSize:10, fontWeight:600 }}>
+                  {copied ? '✓ Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
