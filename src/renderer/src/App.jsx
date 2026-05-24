@@ -818,6 +818,7 @@ function ExportModal({ sspId, systemName, onClose }) {
     if (format === 'oscal') r = await forge.ssp.export({ sspId });
     else if (format === 'docx') r = await forge.ssp.exportDocx({ sspId });
     else if (format === 'pdf')  r = await forge.ssp.exportPdf({ sspId });
+    else if (format === 'csv')  r = await forge.ssp.exportCsv({ sspId });
     setExporting(null);
     if (r?.success) setResult({ ...r, format });
     else if (r && !r.canceled) setError(r.error || 'Export failed.');
@@ -847,10 +848,17 @@ function ExportModal({ sspId, systemName, onClose }) {
       color: '#dc2626',
       icon:  'PDF',
     },
+    {
+      id:    'csv',
+      label: 'CSV Spreadsheet',
+      desc:  'Control-level export: ID, title, status, origin, and narrative. Open in Excel.',
+      color: S.green,
+      icon:  'CSV',
+    },
   ];
 
   if (result) {
-    const formatLabel = result.format === 'oscal' ? 'OSCAL JSON' : result.format === 'docx' ? 'Word Document' : 'PDF Document';
+    const formatLabel = result.format === 'oscal' ? 'OSCAL JSON' : result.format === 'docx' ? 'Word Document' : result.format === 'pdf' ? 'PDF Document' : 'CSV Spreadsheet';
     return (
       <div style={{ position:'fixed',inset:0,backgroundColor:'rgba(0,0,0,0.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000 }}>
         <div style={{ width:480,padding:32,backgroundColor:S.bg1,borderRadius:14,border:`1px solid ${S.bg3}`,textAlign:'center' }}>
@@ -922,8 +930,8 @@ function ExportModal({ sspId, systemName, onClose }) {
           </div>
         )}
 
-        {/* Format cards */}
-        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:20 }}>
+        {/* Format cards — 2x2 grid */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20 }}>
           {FORMAT_CARDS.map(fmt => (
             <button key={fmt.id} onClick={()=>canExport&&handleExport(fmt.id)}
               disabled={!canExport||!!exporting}

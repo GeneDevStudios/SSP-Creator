@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('forge', {
     saveControl: (args) => ipcRenderer.invoke('ssp:save-control', args),
     delete:      (args) => ipcRenderer.invoke('ssp:delete', args),
     export:      (args) => ipcRenderer.invoke('ssp:export', args),
+	exportCsv: (args) => ipcRenderer.invoke('ssp:export-csv', args),
     exportDocx:  (args) => ipcRenderer.invoke('ssp:export-docx', args),
     exportPdf:   (args) => ipcRenderer.invoke('ssp:export-pdf', args),
     preflight:   (args) => ipcRenderer.invoke('ssp:preflight', args),

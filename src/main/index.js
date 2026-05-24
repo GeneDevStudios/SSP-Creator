@@ -967,6 +967,71 @@ ipcMain.handle('ssp:import-backup', async () => {
 });
 
 // ---------------------------------------------------------------
+// IPC — CSV Export
+// ---------------------------------------------------------------
+ipcMain.handle('ssp:export-csv', async (event, { sspId }) => {
+  const db = getDb();
+
+  const ssp = db.prepare('SELECT * FROM ssp_drafts WHERE id = ?').get(sspId);
+  if (!ssp) return { success: false, error: 'SSP not found.' };
+
+  const implementations = db.prepare(
+    `SELECT i.impl_status, i.control_origin, i.narrative, i.remarks,
+            c.control_id AS control_id_str, c.label, c.title, c.statement,
+            cg.title AS group_title, cg.group_id
+     FROM ssp_implementations i
+     JOIN controls c ON c.id = i.control_id
+     JOIN control_groups cg ON cg.id = c.group_id
+     WHERE i.ssp_id = ? AND i.narrative IS NOT NULL AND i.narrative != ''
+     ORDER BY cg.sort_order, c.sort_order`
+  ).all(sspId);
+
+  if (!implementations.length) {
+    return { success: false, error: 'No controls have narrative text. Add at least one control implementation before exporting.' };
+  }
+
+  // Build CSV — escape fields containing commas, quotes, or newlines
+  const escape = (val) => {
+    if (val == null) return '';
+    const s = String(val).replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\r/g, ' ');
+    if (s.includes('"') || s.includes(',') || s.includes('\n')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const headers = ['Control ID', 'Label', 'Family', 'Title', 'Status', 'Origin', 'Narrative', 'Remarks'];
+  const rows = implementations.map(i => [
+    escape(i.control_id_str),
+    escape(i.label),
+    escape(i.group_title),
+    escape(i.title),
+    escape(i.impl_status),
+    escape(i.control_origin),
+    escape(i.narrative),
+    escape(i.remarks),
+  ].join(','));
+
+  const csv = [headers.join(','), ...rows].join('\r\n');
+
+  const defaultName = `ssp-${ssp.system_name.replace(/\s+/g, '-').toLowerCase()}-controls.csv`;
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title:       'Export CSV',
+    defaultPath: defaultName,
+    filters:     [{ name: 'CSV File', extensions: ['csv'] }],
+  });
+  if (canceled) return { success: false, canceled: true };
+
+  try {
+    fs.writeFileSync(filePath, '\uFEFF' + csv, 'utf8'); // BOM for Excel UTF-8 compatibility
+    db.prepare(`UPDATE ssp_drafts SET updated_at=datetime('now') WHERE id=?`).run(sspId);
+    return { success: true, filePath };
+  } catch(err) {
+    return { success: false, error: `CSV export failed: ${err.message}` };
+  }
+});
+
+// ---------------------------------------------------------------
 // IPC — PDF Export
 // ---------------------------------------------------------------
 ipcMain.handle('ssp:export-pdf', async (event, { sspId }) => {
