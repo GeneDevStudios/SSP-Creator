@@ -1,6 +1,6 @@
 {
   "name": "anvil-forge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Anvil FORGE — OSCAL SSP Builder by GeneDevStudios",
   "main": "src/main/index.js",
   "homepage": "https://github.com/GeneDevStudios/SSP-Creator",
