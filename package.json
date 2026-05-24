@@ -1,0 +1,154 @@
+{
+  "name": "anvil-forge",
+  "version": "1.0.0",
+  "description": "Anvil FORGE — OSCAL SSP Builder by GeneDevStudios",
+  "main": "src/main/index.js",
+  "homepage": "https://github.com/GeneDevStudios/SSP-Creator",
+  "author": {
+    "name": "GeneDevStudios",
+    "email": "support@genedevstudios.com",
+    "url": "https://genedevstudios.com"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:renderer\" \"wait-on http://localhost:5173 && npm run dev:main\"",
+    "dev:main": "electron src/main/index.js",
+    "dev:renderer": "vite --config src/renderer/vite.config.js",
+    "build": "npm run build:renderer && npm run build:electron",
+    "build:renderer": "vite build --config src/renderer/vite.config.js",
+    "build:electron": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder --mac --win --linux",
+    "release": "npm run build:renderer && electron-builder --publish always",
+    "postinstall": "electron-builder install-app-deps && npx electron-rebuild -f -w better-sqlite3 -v 29.1.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "docx": "^8.5.0",
+    "electron-updater": "^6.1.8",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^0.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^8.2.2",
+    "electron": "29.1.0",
+    "electron-builder": "^26.8.1",
+    "electron-icon-builder": "^2.0.1",
+    "vite": "^5.4.21",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.genedevstudios.forge",
+    "productName": "Anvil FORGE",
+    "copyright": "Copyright © 2025 GeneDevStudios",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/main/**/*",
+      "src/renderer/dist/**/*",
+      "shared/**/*",
+      "assets/icons/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/catalogs",
+        "to": "catalogs",
+        "filter": [
+          "**/*.json"
+        ]
+      }
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "GeneDevStudios",
+      "repo": "SSP-Creator",
+      "releaseType": "release"
+    },
+    "mac": {
+      "category": "public.app-category.business",
+      "icon": "assets/icons/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "win": {
+      "icon": "assets/icons/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "assets/icons/icon.png",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  }
+}
