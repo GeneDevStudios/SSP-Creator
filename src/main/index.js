@@ -744,6 +744,229 @@ ipcMain.handle('ssp:export-docx', async (event, { sspId }) => {
 });
 
 // ---------------------------------------------------------------
+// IPC — Duplicate SSP
+// ---------------------------------------------------------------
+ipcMain.handle('ssp:duplicate', (event, { sspId }) => {
+  const { randomUUID } = require('crypto');
+  const db = getDb();
+
+  const ssp = db.prepare('SELECT * FROM ssp_drafts WHERE id = ?').get(sspId);
+  if (!ssp) return { success: false, error: 'SSP not found.' };
+
+  const newId = randomUUID();
+
+  const duplicate = db.transaction(() => {
+    // ssp_drafts
+    db.prepare(
+      `INSERT INTO ssp_drafts (id, catalog_id, system_name, system_version, org_name, profile_href, oscal_version, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'), datetime('now'))`
+    ).run(newId, ssp.catalog_id, `${ssp.system_name} (Copy)`, ssp.system_version||null, ssp.org_name||null, ssp.profile_href||null, ssp.oscal_version||'1.1.2');
+
+    // ssp_characterization
+    const char = db.prepare('SELECT * FROM ssp_characterization WHERE ssp_id = ?').get(sspId);
+    if (char) {
+      db.prepare(
+        `INSERT INTO ssp_characterization (ssp_id, system_identifier, security_category, impact_confidentiality, impact_integrity, impact_availability, operational_status, system_type, additional_info)
+         VALUES (?,?,?,?,?,?,?,?,?)`
+      ).run(newId, char.system_identifier||null, char.security_category||null, char.impact_confidentiality||null, char.impact_integrity||null, char.impact_availability||null, char.operational_status||null, char.system_type||null, char.additional_info||null);
+    }
+
+    // ssp_description
+    const desc = db.prepare('SELECT * FROM ssp_description WHERE ssp_id = ?').get(sspId);
+    if (desc) {
+      db.prepare(
+        `INSERT INTO ssp_description (ssp_id, general_description, function_purpose, boundary_description, data_types, user_types, additional_info)
+         VALUES (?,?,?,?,?,?,?)`
+      ).run(newId, desc.general_description||null, desc.function_purpose||null, desc.boundary_description||null, desc.data_types||null, desc.user_types||null, desc.additional_info||null);
+    }
+
+    // ssp_implementations
+    const impls = db.prepare('SELECT * FROM ssp_implementations WHERE ssp_id = ?').all(sspId);
+    for (const impl of impls) {
+      db.prepare(
+        `INSERT INTO ssp_implementations (id, ssp_id, control_id, impl_status, control_origin, narrative, remarks, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,datetime('now'),datetime('now'))`
+      ).run(randomUUID(), newId, impl.control_id, impl.impl_status||null, impl.control_origin||null, impl.narrative||null, impl.remarks||null);
+    }
+
+    // ssp_diagrams
+    const diags = db.prepare('SELECT * FROM ssp_diagrams WHERE ssp_id = ?').all(sspId);
+    for (const diag of diags) {
+      db.prepare(
+        `INSERT INTO ssp_diagrams (id, ssp_id, diagram_type, filename, mime_type, data, additional_info, created_at)
+         VALUES (?,?,?,?,?,?,?,datetime('now'))`
+      ).run(randomUUID(), newId, diag.diagram_type, diag.filename, diag.mime_type, diag.data, diag.additional_info||null);
+    }
+
+    // ssp_logo
+    const logo = db.prepare('SELECT * FROM ssp_logo WHERE ssp_id = ?').get(sspId);
+    if (logo) {
+      db.prepare(
+        `INSERT INTO ssp_logo (ssp_id, filename, mime_type, data, include_branding, created_at, updated_at)
+         VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`
+      ).run(newId, logo.filename, logo.mime_type, logo.data, logo.include_branding ?? 1);
+    }
+  });
+
+  try {
+    duplicate();
+    return { success: true, newId, systemName: `${ssp.system_name} (Copy)` };
+  } catch(err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// ---------------------------------------------------------------
+// IPC — Backup / Restore
+// ---------------------------------------------------------------
+ipcMain.handle('ssp:export-backup', async (event, { sspId }) => {
+  const { randomUUID } = require('crypto');
+  const db = getDb();
+
+  const ssp = db.prepare('SELECT * FROM ssp_drafts WHERE id = ?').get(sspId);
+  if (!ssp) return { success: false, error: 'SSP not found.' };
+
+  const characterization = db.prepare('SELECT * FROM ssp_characterization WHERE ssp_id = ?').get(sspId) || null;
+  const description      = db.prepare('SELECT * FROM ssp_description WHERE ssp_id = ?').get(sspId) || null;
+  const implementations  = db.prepare('SELECT * FROM ssp_implementations WHERE ssp_id = ?').all(sspId);
+  const diagrams         = db.prepare('SELECT * FROM ssp_diagrams WHERE ssp_id = ?').all(sspId);
+  const logo             = db.prepare('SELECT * FROM ssp_logo WHERE ssp_id = ?').get(sspId) || null;
+
+  // Grab catalog metadata for mismatch warning on restore
+  const catalog = db.prepare('SELECT id, name, short_name, version, oscal_version, source_format FROM catalogs WHERE id = ?').get(ssp.catalog_id) || null;
+
+  const envelope = {
+    __forge_backup: true,
+    backup_version: 1,
+    exported_at: new Date().toISOString(),
+    catalog_snapshot: catalog,
+    ssp, characterization, description, implementations, diagrams, logo,
+  };
+
+  const defaultName = `${ssp.system_name.replace(/\s+/g,'-').toLowerCase()}-backup.forge-backup`;
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title:       'Export SSP Backup',
+    defaultPath: defaultName,
+    filters:     [{ name: 'Forge Backup', extensions: ['forge-backup'] }],
+  });
+  if (canceled) return { success: false, canceled: true };
+
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(envelope, null, 2), 'utf8');
+    return { success: true, filePath };
+  } catch(err) {
+    return { success: false, error: `Backup failed: ${err.message}` };
+  }
+});
+
+ipcMain.handle('ssp:import-backup', async () => {
+  const { randomUUID } = require('crypto');
+
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title:      'Import SSP Backup',
+    filters:    [{ name: 'Forge Backup', extensions: ['forge-backup'] }],
+    properties: ['openFile'],
+  });
+  if (canceled || !filePaths.length) return { success: false, canceled: true };
+
+  let envelope;
+  try {
+    envelope = JSON.parse(fs.readFileSync(filePaths[0], 'utf8'));
+  } catch {
+    return { success: false, error: 'File is not valid JSON.' };
+  }
+
+  if (!envelope.__forge_backup || envelope.backup_version !== 1) {
+    return { success: false, error: 'Not a valid Forge backup file.' };
+  }
+
+  const { ssp, characterization, description, implementations, diagrams, logo, catalog_snapshot } = envelope;
+
+  const db = getDb();
+
+  // Check catalog compatibility
+  const catalogExists = catalog_snapshot
+    ? db.prepare('SELECT id FROM catalogs WHERE id = ?').get(catalog_snapshot.id)
+    : null;
+
+  const warnings = [];
+  if (!catalogExists) {
+    warnings.push(catalog_snapshot
+      ? `Catalog "${catalog_snapshot.name} (${catalog_snapshot.version})" is not installed. Control implementations will be restored but may not resolve without the matching catalog.`
+      : 'Original catalog is unknown. Control implementations may not resolve.'
+    );
+  }
+
+  // Remap to new UUIDs
+  const newSspId = randomUUID();
+  const controlIdMap = {}; // old impl id → skipped (control refs stay as-is, catalog must match)
+
+  const restore = db.transaction(() => {
+    // ssp_drafts
+    db.prepare(
+      `INSERT INTO ssp_drafts (id, catalog_id, system_name, system_version, org_name, profile_href, oscal_version, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'), datetime('now'))`
+    ).run(newSspId, ssp.catalog_id, `${ssp.system_name} (Restored)`, ssp.system_version||null, ssp.org_name||null, ssp.profile_href||null, ssp.oscal_version||'1.1.2');
+
+    // ssp_characterization
+    if (characterization) {
+      const c = characterization;
+      db.prepare(
+        `INSERT OR IGNORE INTO ssp_characterization (ssp_id, system_identifier, security_category, impact_confidentiality, impact_integrity, impact_availability, operational_status, system_type, additional_info)
+         VALUES (?,?,?,?,?,?,?,?,?)`
+      ).run(newSspId, c.system_identifier||null, c.security_category||null, c.impact_confidentiality||null, c.impact_integrity||null, c.impact_availability||null, c.operational_status||null, c.system_type||null, c.additional_info||null);
+    }
+
+    // ssp_description
+    if (description) {
+      const d = description;
+      db.prepare(
+        `INSERT OR IGNORE INTO ssp_description (ssp_id, general_description, function_purpose, boundary_description, data_types, user_types, additional_info)
+         VALUES (?,?,?,?,?,?,?)`
+      ).run(newSspId, d.general_description||null, d.function_purpose||null, d.boundary_description||null, d.data_types||null, d.user_types||null, d.additional_info||null);
+    }
+
+    // ssp_implementations — only restore if control_id still exists in DB
+    for (const impl of (implementations || [])) {
+      const controlExists = db.prepare('SELECT id FROM controls WHERE id = ?').get(impl.control_id);
+      if (!controlExists) continue; // skip orphaned refs
+      db.prepare(
+        `INSERT OR IGNORE INTO ssp_implementations (id, ssp_id, control_id, impl_status, control_origin, narrative, remarks, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,datetime('now'),datetime('now'))`
+      ).run(randomUUID(), newSspId, impl.control_id, impl.impl_status||null, impl.control_origin||null, impl.narrative||null, impl.remarks||null);
+    }
+
+    // ssp_diagrams
+    for (const diag of (diagrams || [])) {
+      db.prepare(
+        `INSERT OR IGNORE INTO ssp_diagrams (id, ssp_id, diagram_type, filename, mime_type, data, additional_info, created_at)
+         VALUES (?,?,?,?,?,?,?,datetime('now'))`
+      ).run(randomUUID(), newSspId, diag.diagram_type, diag.filename, diag.mime_type, diag.data, diag.additional_info||null);
+    }
+
+    // ssp_logo
+    if (logo) {
+      db.prepare(
+        `INSERT OR IGNORE INTO ssp_logo (ssp_id, filename, mime_type, data, include_branding, created_at, updated_at)
+         VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`
+      ).run(newSspId, logo.filename, logo.mime_type, logo.data, logo.include_branding ?? 1);
+    }
+  });
+
+  try {
+    restore();
+    return {
+      success: true,
+      newSspId,
+      systemName: `${ssp.system_name} (Restored)`,
+      warnings,
+    };
+  } catch(err) {
+    return { success: false, error: `Restore failed: ${err.message}` };
+  }
+});
+
+// ---------------------------------------------------------------
 // IPC — PDF Export
 // ---------------------------------------------------------------
 ipcMain.handle('ssp:export-pdf', async (event, { sspId }) => {

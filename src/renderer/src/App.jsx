@@ -55,6 +55,9 @@ const UploadIcon   = () => <svg width="14" height="14" viewBox="0 0 16 16" fill=
 const ChevronIcon  = ({open}) => <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{transform:open?'rotate(90deg)':'rotate(0deg)',transition:'transform 0.15s'}}><path d="M6 4l4 4-4 4"/></svg>;
 const InfoIcon     = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="7"/><path d="M8 7v4M8 5v.5"/></svg>;
 const FileIcon     = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 1h5l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z"/><path d="M9 1v4h4"/></svg>;
+const BackupIcon   = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M11 4H5a3 3 0 000 6h1"/><path d="M9 12l2 2 2-2"/><path d="M11 10v4"/></svg>;
+const RestoreIcon  = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 8a6 6 0 106-6H5"/><path d="M2 4v4h4"/></svg>;
+const CopyIcon     = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M3 11V3a1 1 0 011-1h8"/></svg>;
 
 // ═══════════════════════════════════════════════════════════════════
 // UPDATE BANNER
@@ -129,6 +132,10 @@ function Dashboard({ onOpen }) {
   const [loading, setLoading]   = useState(true);
   const [showNew, setShowNew]   = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+  const [backupMsg, setBackupMsg]       = useState(null); // { type:'success'|'error', text }
+  const [restoreResult, setRestoreResult] = useState(null); // { newSspId, systemName, warnings[] }
+  const [restoring, setRestoring] = useState(false);
+  const [duplicating, setDuplicating] = useState(null); // sspId currently being duplicated
 
   const load = () => forge.ssp.list().then(setSsps).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
@@ -136,6 +143,44 @@ function Dashboard({ onOpen }) {
   const handleDelete = async () => {
     await forge.ssp.delete({ id: deleteId });
     setDeleteId(null); load();
+  };
+
+  const handleBackup = async (sspId) => {
+    const result = await forge.ssp.exportBackup({ sspId });
+    if (result?.canceled) return;
+    if (result?.success) {
+      setBackupMsg({ type:'success', text:'Backup saved successfully.' });
+    } else {
+      setBackupMsg({ type:'error', text: result?.error || 'Backup failed.' });
+    }
+    setTimeout(() => setBackupMsg(null), 3500);
+  };
+
+  const handleRestore = async () => {
+    setRestoring(true);
+    const result = await forge.ssp.importBackup();
+    setRestoring(false);
+    if (result?.canceled) return;
+    if (result?.success) {
+      await load();
+      setRestoreResult({ newSspId: result.newSspId, systemName: result.systemName, warnings: result.warnings || [] });
+    } else {
+      setBackupMsg({ type:'error', text: result?.error || 'Restore failed.' });
+      setTimeout(() => setBackupMsg(null), 4000);
+    }
+  };
+
+  const handleDuplicate = async (sspId) => {
+    setDuplicating(sspId);
+    const result = await forge.ssp.duplicate({ sspId });
+    setDuplicating(null);
+    if (result?.success) {
+      await load();
+      setBackupMsg({ type:'success', text:`"${result.systemName}" created.` });
+    } else {
+      setBackupMsg({ type:'error', text: result?.error || 'Duplicate failed.' });
+    }
+    setTimeout(() => setBackupMsg(null), 3500);
   };
 
   const statusBadge = (s) => {
@@ -151,8 +196,22 @@ function Dashboard({ onOpen }) {
           <div style={{ fontSize:22, fontWeight:800, color:S.t1 }}>SSP Drafts</div>
           <div style={{ fontSize:13, color:S.t5, marginTop:2 }}>Build and export OSCAL System Security Plans</div>
         </div>
-        <button onClick={() => setShowNew(true)} style={{ ...S.btn(), padding:'10px 20px' }}><PlusIcon /> New SSP</button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={handleRestore} disabled={restoring} style={{ ...S.btnOutline, padding:'10px 16px', opacity:restoring?0.6:1 }}>
+            <RestoreIcon /> {restoring ? 'Restoring…' : 'Import Backup'}
+          </button>
+          <button onClick={() => setShowNew(true)} style={{ ...S.btn(), padding:'10px 20px' }}><PlusIcon /> New SSP</button>
+        </div>
       </div>
+
+      {backupMsg && (
+        <div style={{ marginBottom:16, padding:'10px 14px', borderRadius:8, fontSize:12, fontWeight:600,
+          backgroundColor: backupMsg.type==='success' ? S.green+'22' : '#dc262622',
+          color: backupMsg.type==='success' ? '#34d399' : '#f87171',
+          border:`1px solid ${backupMsg.type==='success' ? S.green+'44' : '#dc262644'}` }}>
+          {backupMsg.text}
+        </div>
+      )}
 
       {loading && <div style={{ color:S.t5, fontSize:13, textAlign:'center', padding:40 }}>Loading…</div>}
 
@@ -182,6 +241,12 @@ function Dashboard({ onOpen }) {
                 {new Date(ssp.updated_at).toLocaleDateString()}
               </div>
             </div>
+            <button onClick={() => handleBackup(ssp.id)} style={{ ...S.btnOutline, padding:'5px 8px', borderColor:'transparent', color:S.t5, flexShrink:0 }} title="Export Backup">
+              <BackupIcon />
+            </button>
+            <button onClick={() => handleDuplicate(ssp.id)} disabled={duplicating===ssp.id} style={{ ...S.btnOutline, padding:'5px 8px', borderColor:'transparent', color:duplicating===ssp.id?S.t5:S.t5, flexShrink:0, opacity:duplicating===ssp.id?0.5:1 }} title="Duplicate">
+              <CopyIcon />
+            </button>
             <button onClick={() => setDeleteId(ssp.id)} style={{ ...S.btnOutline, padding:'5px 8px', borderColor:'transparent', color:S.t5, flexShrink:0 }} title="Delete">
               <TrashIcon />
             </button>
@@ -190,6 +255,29 @@ function Dashboard({ onOpen }) {
       </div>
 
       {showNew && <NewSspModal onClose={() => setShowNew(false)} onCreate={(id) => { setShowNew(false); onOpen(id); }} />}
+
+      {restoreResult && (
+        <div style={{ position:'fixed',inset:0,backgroundColor:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000 }} onClick={() => setRestoreResult(null)}>
+          <div style={{ width:420,padding:28,backgroundColor:S.bg1,borderRadius:14,border:`1px solid ${S.bg3}` }} onClick={e=>e.stopPropagation()}>
+            <div style={{ fontSize:16,fontWeight:700,color:S.t1,marginBottom:8 }}>SSP Restored</div>
+            <div style={{ fontSize:13,color:S.t4,marginBottom:restoreResult.warnings.length?12:20 }}>
+              <span style={{ color:S.t2,fontWeight:600 }}>{restoreResult.systemName}</span> has been restored as a new draft.
+            </div>
+            {restoreResult.warnings.length > 0 && (
+              <div style={{ marginBottom:20, padding:'10px 14px', borderRadius:8, backgroundColor:S.amber+'18', border:`1px solid ${S.amber}44` }}>
+                <div style={{ fontSize:11,fontWeight:700,color:S.amber,marginBottom:6 }}>⚠ Warnings</div>
+                {restoreResult.warnings.map((w,i) => (
+                  <div key={i} style={{ fontSize:11,color:S.t4,lineHeight:1.5 }}>{w}</div>
+                ))}
+              </div>
+            )}
+            <div style={{ display:'flex',gap:8,justifyContent:'flex-end' }}>
+              <button onClick={() => setRestoreResult(null)} style={S.btnOutline}>Dismiss</button>
+              <button onClick={() => { setRestoreResult(null); onOpen(restoreResult.newSspId); }} style={S.btn()}>Open SSP</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteId && (
         <div style={{ position:'fixed',inset:0,backgroundColor:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000 }} onClick={() => setDeleteId(null)}>

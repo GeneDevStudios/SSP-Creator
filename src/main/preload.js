@@ -35,6 +35,10 @@ contextBridge.exposeInMainWorld('forge', {
     saveDiagramNote: (args) => ipcRenderer.invoke('ssp:save-diagram-note', args),
     deleteDiagram:   (args) => ipcRenderer.invoke('ssp:delete-diagram', args),
 
+    duplicate:    (args) => ipcRenderer.invoke('ssp:duplicate', args),
+    exportBackup: (args) => ipcRenderer.invoke('ssp:export-backup', args),
+    importBackup: ()     => ipcRenderer.invoke('ssp:import-backup'),
+
     getLogo:      (args) => ipcRenderer.invoke('ssp:get-logo', args),
     saveLogo:     (args) => ipcRenderer.invoke('ssp:save-logo', args),
     deleteLogo:   (args) => ipcRenderer.invoke('ssp:delete-logo', args),
