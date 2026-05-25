@@ -496,6 +496,42 @@ ipcMain.handle('shell:show-file', (event, { filePath }) => {
 // App version
 ipcMain.handle('app:version', () => app.getVersion());
 
+ipcMain.handle('app:fetch-changelog', async () => {
+  return new Promise((resolve) => {
+    const https = require('https');
+    const options = {
+      hostname: 'api.github.com',
+      path:     '/repos/GeneDevStudios/SSP-Creator/releases?per_page=50',
+      method:   'GET',
+      headers:  {
+        'User-Agent':  'Anvil-FORGE-App',
+        'Accept':      'application/vnd.github+json',
+      },
+      timeout: 8000,
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          try {
+            resolve({ success: true, releases: JSON.parse(data) });
+          } catch {
+            resolve({ success: false, error: 'Failed to parse GitHub response.' });
+          }
+        } else {
+          resolve({ success: false, error: `GitHub API returned ${res.statusCode}.` });
+        }
+      });
+    });
+
+    req.on('error', (err) => resolve({ success: false, error: err.message }));
+    req.on('timeout', () => { req.destroy(); resolve({ success: false, error: 'Request timed out.' }); });
+    req.end();
+  });
+});
+
 // ---------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------

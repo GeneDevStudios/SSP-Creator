@@ -108,10 +108,13 @@ function ChangelogModal({ onClose }) {
   const [error, setError]       = useState(null);
 
   useEffect(() => {
-    fetch('https://api.github.com/repos/GeneDevStudios/SSP-Creator/releases?per_page=50')
-      .then(r => { if (!r.ok) throw new Error(`GitHub API error: ${r.status}`); return r.json(); })
-      .then(data => {
-        setReleases(data);
+    forge.app.fetchChangelog()
+      .then(result => {
+        if (result?.success) {
+          setReleases(result.releases);
+        } else {
+          setError(result?.error || 'Could not load release notes.');
+        }
         setLoading(false);
       })
       .catch(err => {

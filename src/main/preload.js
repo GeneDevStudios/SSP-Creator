@@ -51,7 +51,8 @@ contextBridge.exposeInMainWorld('forge', {
   },
 
   app: {
-    version: () => ipcRenderer.invoke('app:version'),
+    version:        () => ipcRenderer.invoke('app:version'),
+    fetchChangelog: () => ipcRenderer.invoke('app:fetch-changelog'),
   },
 
   updater: {
