@@ -741,9 +741,9 @@ function ControlDetailPane({ control, implStatus, controlOrigin, narrative, rema
         <div style={{ backgroundColor:S.bg1,borderRadius:8,padding:'12px 16px',marginBottom:20,borderLeft:`3px solid ${S.purple}` }}>
           <div style={{ fontSize:10,color:S.t5,fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:8 }}>Assessment Objectives</div>
           {(control.objectives||[]).map(obj=>(
-            <div key={obj.objective_id} style={{ display:'flex',gap:10,marginBottom:6 }}>
+            <div key={obj.objective_id} style={{ display:'flex',gap:10,marginBottom:6,paddingLeft:(obj.depth||0)*14,opacity:obj.isContainer?0.6:1 }}>
               <span style={{ fontSize:10,fontFamily:S.mono,color:S.purple,fontWeight:700,flexShrink:0,marginTop:1 }}>{obj.label||obj.objective_id}</span>
-              <span style={{ fontSize:12,color:S.t4,lineHeight:1.5 }}>{obj.prose}</span>
+              {obj.prose&&<span style={{ fontSize:12,color:S.t4,lineHeight:1.5 }}>{obj.prose}</span>}
             </div>
           ))}
         </div>

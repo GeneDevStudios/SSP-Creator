@@ -18,7 +18,7 @@
  *           title: string,
  *           statement: string|null,
  *           guidance: string|null,
- *           objectives: [{ objectiveId, label, prose }],
+ *           objectives: [{ objective_id, label, prose, isContainer? }],
  *           enhancements: [ ...same shape, recursive ]
  *         }
  *       ]
@@ -189,7 +189,12 @@ function extractGuidance(ctrl) {
 
 /**
  * Extract assessment objectives from a control's parts.
- * Returns flat array of { objectiveId, label, prose }.
+ * Returns flat array of { objective_id, label, prose, isContainer? }.
+ *
+ * Skips the root container node (e.g. ac-1_obj) which carries no label and
+ * is never rendered. Starts recursion from the letter-level children
+ * (ac-1_obj.a, ac-1_obj.b, …) so container headers are preserved while the
+ * invisible root is dropped.
  */
 function extractObjectives(ctrl) {
   const parts = ctrl.parts || [];
@@ -198,25 +203,49 @@ function extractObjectives(ctrl) {
   );
   if (!objPart) return [];
 
-  return flattenObjectives(objPart);
+  // Skip the invisible root container — recurse from its children
+  const topChildren = (objPart.parts || []).filter(
+    p => p.name === 'assessment-objective' || p.name === 'objective'
+  );
+  if (topChildren.length === 0) {
+    // Flat catalog: prose sits directly on root — treat as single leaf
+    return flattenObjectives(objPart);
+  }
+  const acc = [];
+  for (const child of topChildren) {
+    flattenObjectives(child, acc);
+  }
+  return acc;
 }
 
-function flattenObjectives(part, acc = []) {
-  // Leaf objective: has prose and no further objective sub-parts
+function flattenObjectives(part, acc = [], depth = 0) {
   const subObjectives = (part.parts || []).filter(
     p => p.name === 'objective' || p.name === 'assessment-objective'
   );
 
-  if (part.prose && subObjectives.length === 0) {
+  if (subObjectives.length === 0) {
+    // Leaf node — only push if it has prose (skip empty container roots)
+    if (part.prose) {
+      acc.push({
+        objective_id: part.id || '',
+        label:        extractProp(part, 'label') || null,
+        prose:        part.prose.trim(),
+        isContainer:  false,
+        depth,
+      });
+    }
+  } else {
+    // Container node — push a header entry, then recurse into children
     acc.push({
-      objectiveId: part.id    || '',
-      label:       extractProp(part, 'label') || null,
-      prose:       part.prose.trim(),
+      objective_id: part.id || '',
+      label:        extractProp(part, 'label') || null,
+      prose:        part.prose ? part.prose.trim() : null,
+      isContainer:  true,
+      depth,
     });
-  }
-
-  for (const sub of subObjectives) {
-    flattenObjectives(sub, acc);
+    for (const sub of subObjectives) {
+      flattenObjectives(sub, acc, depth + 1);
+    }
   }
 
   return acc;
